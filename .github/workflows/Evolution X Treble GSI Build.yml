@@ -12,7 +12,6 @@ jobs:
           fetch-depth: 0
 
       - name: Initialize build environment and install dependencies
-        # 💡 اضافه شدن python3 --version و ادغام apt update/install
         run: |
           echo "Checking Python 3 version available on the runner:"
           python3 --version
@@ -20,8 +19,6 @@ jobs:
           echo "Updating packages and installing build dependencies..."
           sudo apt update
           sudo apt install -y git-lfs repo ccache make openjdk-11-jdk xz-utils curl
-          
-          # اگرچه python3.8 نصب نشده، اما این بخش وابستگی‌های لازم برای repo sync را فراهم می‌کند.
 
       - name: Configure ccache
         run: |
@@ -29,7 +26,7 @@ jobs:
           echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
           ccache -M 50G -F 0
 
-      - name: Create directories, initialize EvoX Treble repo, and download manifests
+      - name: Create directories, initialize EvoX Treble repo, and download manifests (FIXED)
         run: |
           mkdir -p evo
           cd evo
@@ -56,12 +53,14 @@ jobs:
           LINEAGE_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/lineage.xml"
           curl -Lo .repo/snippets/lineage.xml "$LINEAGE_SNIPPET_URL"
 
-          # خطای 'fi' در اینجا حذف شده است تا خطای نحوی برطرف شود.
-          
+          # 6. FIX: Add a local manifest to remove the duplicate path
+          # نام پروژه پلتفرم برای bazel_common_rules معمولاً همین است.
+          echo '<manifest>' > .repo/local_manifests/fix_duplicate.xml
+          echo '  <remove-project name="platform/build/bazel_common_rules" />' >> .repo/local_manifests/fix_duplicate.xml 
+          echo '</manifest>' >> .repo/local_manifests/fix_duplicate.xml
+
           cd ..
       
-      
-
       - name: Sync repository (Stable sync with Python fix)
         timeout-minutes: 360 
         run: |
