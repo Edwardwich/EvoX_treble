@@ -26,7 +26,7 @@ jobs:
           echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
           ccache -M 50G -F 0
 
-      - name: Create directories, initialize EvoX Treble repo, and download manifests (FIXED)
+      - name: Create directories, initialize EvoX Treble repo, and download manifests (Final Fix)
         run: |
           mkdir -p evo
           cd evo
@@ -42,6 +42,7 @@ jobs:
           mkdir -p .repo/snippets 
           
           # 3. DOWNLOAD the Treble Manifest (default.xml)
+          # توجه: این مانیفست احتمالاً حاوی تعاریف تکراری AOSP است.
           TREBLE_MANIFEST_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/default.xml"
           curl -Lo .repo/local_manifests/default.xml "$TREBLE_MANIFEST_URL"
           
@@ -53,15 +54,14 @@ jobs:
           LINEAGE_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/lineage.xml"
           curl -Lo .repo/snippets/lineage.xml "$LINEAGE_SNIPPET_URL"
 
-          # 6. FINAL FIX: Remove the project that is duplicated by both manifests
+          # 6. FINAL FIX: Remove the specific project causing the conflict based on debug output.
+          # این فایل از اجرای sync جلوگیری می کند و مانیفست اصلی را مجبور می کند تا پروژه را نادیده بگیرد.
           echo '<manifest>' > .repo/local_manifests/fix_duplicate.xml
           echo '  <remove-project name="platform/build/bazel_common_rules" />' >> .repo/local_manifests/fix_duplicate.xml 
           echo '</manifest>' >> .repo/local_manifests/fix_duplicate.xml
 
           cd ..
       
-      # The Debug step has been removed now that the project name is confirmed.
-
       - name: Sync repository (Stable sync with Python fix)
         timeout-minutes: 360 
         run: |
