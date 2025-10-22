@@ -1,16 +1,19 @@
-name: Evolution X Treble GSI Build (Without External Manifest)
+name: Evolution X Treble GSI Build
 
 on:
+  # Allows manual triggering from the GitHub Actions tab
   workflow_dispatch:
     inputs:
       EVO_BRANCH:
-        description: 'Evolution X manifest branch (e.g., bka for your specific build)'
+        description: 'Evolution X manifest branch (e.g., bka for Android 16)'
         required: true
-        default: 'bka'
+        default: 'bka' # Your desired branch
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # Set a maximum time limit for the job
     timeout-minutes: 360
 
     steps:
@@ -25,17 +28,20 @@ jobs:
         mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
+        # Make the repo tool available to all subsequent steps
         echo "$HOME/bin" >> $GITHUB_PATH
         
     - name: Setup Build Environment & Install Dependencies
       run: |
         echo "Updating system and installing dependencies..."
         sudo apt update
+        # Fix: Using 'python-is-python3' instead of obsolete 'python'
         sudo apt install -y python-is-python3 python3-pip make zip xz-utils rsync gnupg build-essential ccache curl git bc bison flex libncurses5-dev libssl-dev texinfo gawk liblz4-tool
         
-        echo "Setting up 16GB swap file..."
+        # INCREASED SWAP FILE TO 50GB
+        echo "Setting up 50GB swap file..."
         sudo swapoff -a
-        sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+        sudo dd if=/dev/zero of=/swapfile bs=1M count=51200 # 50 GB
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
@@ -49,7 +55,7 @@ jobs:
         echo "Initializing Evolution X manifest..."
         repo init --depth=1 -u https://github.com/Evolution-X/manifest -b ${{ github.event.inputs.EVO_BRANCH }}
         
-        # 2. Run Sync: Download the source code
+        # 2. Run Sync: Download the source code (This will now run without authentication or repo path errors)
         echo "Starting repo sync..."
         repo sync -c --force-sync --no-clone-bundle --no-tags -j$(nproc --all)
         
@@ -57,17 +63,15 @@ jobs:
       run: |
         cd evo
         
-        # ⚠️ توجه: اگر از مانیفست محلی استفاده نمی‌کنید، باید سورس TrebleDroid را اضافه کنید.
-        # فرض می‌کنیم شما پچ‌ها و ماژول device/mytja/evo/ را به صورت دستی اضافه یا حذف کرده‌اید.
-        
-        # اگر پچ‌ها در مسیر استاندارد TrebleDroid باشند:
+        # ⚠️ NOTE: This step assumes the necessary TrebleDroid patches are either in your source
+        # or were manually added via your own local manifest, as Mytja's repository was removed.
         if [ -d "./patches" ]; then
           echo "Applying patches..."
           ./patches/apply-all.sh
         fi
         
-        # ⚠️ توجه: این مسیر makefile (../../mytja/evo/evo.mk) ممکن است دیگر وجود نداشته باشد.
-        # اگر این خط خطا داد، باید آن را به مسیر makefile GSI مورد نظر خود تغییر دهید.
+        # Generate the required makefile for the GSI build
+        # ⚠️ DOUBLE CHECK THIS PATH: If device/mytja/evo/evo.mk does not exist after sync, this will fail.
         echo "Generating Treble makefile..."
         cd device/phh/treble
         bash generate.sh ../../mytja/evo/evo.mk
@@ -83,6 +87,7 @@ jobs:
         echo "Starting GSI compilation..."
         cd evo
         source build/envsetup.sh
+        # Set up Ccache 
         ccache -M 50G -F 0
         lunch treble_arm64_bgN-userdebug
         make systemimage -j$(nproc --all)
