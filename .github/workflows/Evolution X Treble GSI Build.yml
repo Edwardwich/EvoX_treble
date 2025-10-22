@@ -1,119 +1,107 @@
+
+
 on:
   workflow_dispatch:
-  
+    inputs:
+      EVO_BRANCH:
+        description: 'Evolution X manifest branch'
+        required: true
+        default: 'udc' # Example branch for Android U/14
+
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
+    # 1. تنظیمات محیط
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout Repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-      - name: Initialize build environment and install dependencies
-        run: |
-          echo "Checking Python 3 version available on the runner:"
-          python3 --version
-          
-          echo "Updating packages and installing build dependencies..."
-          sudo apt update
-          sudo apt install -y git-lfs repo ccache make openjdk-11-jdk xz-utils curl
+    - name: Setup Build Environment
+      run: |
+        sudo apt update
+        sudo apt install -y python python3-pip make zip xz-utils rsync gnupg build-essential ccache curl
+        # افزایش فضای دیسک (برای GSI Build ضروری است)
+        sudo swapoff -a
+        sudo dd if=/dev/zero of=/swapfile bs=1M count=16384  # 16GB
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
 
-      - name: Configure ccache
-        run: |
-          echo "USE_CCACHE=1" >> $GITHUB_ENV
-          echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
-          ccache -M 50G -F 0
+    # 2. آماده سازی Repo
+    - name: Install Repo
+      run: |
+        mkdir -p ~/bin
+        PATH=~/bin:$PATH
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
 
-      - name: Create directories, initialize EvoX Treble repo, and download manifests (Final Fix)
-        run: |
-          mkdir -p evo
-          cd evo
-          
-          # تنظیم یک متغیر محیطی برای اطمینان از اینکه اخطارهای Python نادیده گرفته شوند
-          export REPO_FLAGS="-W ignore::DeprecationWarning"
-          
-          # 1. Initialize the Evolution-X manifest
-          repo init -u https://github.com/edwardwich/manifest -b bka --git-lfs
-          
-          # 2. Prepare directories
-          mkdir -p .repo/local_manifests
-          mkdir -p .repo/snippets 
-          
-          # 3. DOWNLOAD the Treble Manifest (default.xml)
-          TREBLE_MANIFEST_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/default.xml"
-          curl -Lo .repo/local_manifests/default.xml "$TREBLE_MANIFEST_URL"
-          
-          # **CRITICAL FIX:** Remove the duplicate project definition using sed.
-          # This targets the exact line confirmed by the debug output.
-          echo "Applying fix for duplicate project: platform/build/bazel_common_rules"
-          sed -i '/platform\/build\/bazel_common_rules/d' .repo/local_manifests/default.xml
-          
-          # 4. DOWNLOAD the EvoX Snippet (evolution.xml)
-          EVOX_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/evolution.xml"
-          curl -Lo .repo/snippets/evolution.xml "$EVOX_SNIPPET_URL"
+    # 3. ایجاد و همگام سازی دایرکتوری بیلد
+    - name: Initialize and Sync Manifest
+      run: |
+        mkdir -p evo
+        cd evo
+        
+        # الف. Repo Init
+        repo init --depth=1 -u https://github.com/Evolution-X/manifest -b ${{ github.event.inputs.EVO_BRANCH }}
+        
+        # ب. کلون کردن مانیفست محلی (Treble Manifest)
+        # ⚠️ توجه: این بخش ممکن است باعث خطای 'duplicate path' شما شود.
+        # من اینجا از یک مثال رایج استفاده می‌کنم.
+        git clone https://github.com/mytja/treble_manifest.git -b evo-${{ github.event.inputs.EVO_BRANCH }} .repo/local_manifests
+        
+        # ج. اجرای Sync (خطایی که گزارش کردید اینجا رخ می‌دهد)
+        repo sync -c --force-sync --no-clone-bundle --no-tags -j$(nproc --all)
+        
+    # 4. رفع خطای 'duplicate path' (اقدام فرضی)
+    # اگر مانیفست محلی شما واقعاً باعث تکرار 'build/blueprint' شده باشد،
+    # ممکن است نیاز باشد این ماژول را حذف کنید:
+    #- name: Remove Duplicate Project (Hypothetical Fix)
+    #  run: |
+    #    cd evo/.repo/local_manifests
+    #    # این یک دستور فرضی است. شما باید XML را ویرایش کنید.
+    #    # sed -i '/<project path="build\/blueprint"/d' your_local_manifest.xml
+    #    # یا اگر پروژه مورد نظر شما در مانیفست محلی بود، فایل را ویرایش کنید.
 
-          # 5. DOWNLOAD the Lineage Snippet (lineage.xml)
-          LINEAGE_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/lineage.xml"
-          curl -Lo .repo/snippets/lineage.xml "$LINEAGE_SNIPPET_URL"
-
-          cd ..
-      
-      - name: Sync repository (Stable sync with Python fix)
-        timeout-minutes: 360 
-        run: |
-          cd evo
-          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
-
-      - name: Apply patches and configure Treble
-        run: |
-          cd evo
-          
-          cp ../evo.mk device/phh/treble/
-          cp -r ../patches .
-          
-          cd device/phh/treble
-          bash generate.sh evo
-          
-          cd ../../../ 
-          patches/apply-patches.sh . trebledroid
-          patches/apply-patches.sh . personal
-          patches/apply-patches.sh . ponces
-
-      - name: Compile GSI (System Image)
-        timeout-minutes: 180 
-        run: |
-          cd evo
-          source build/envsetup.sh
-          
-          # Target: A/B, 64-bit, Binder-64
-          lunch treble_arm64_bvN-userdebug
-          
-          make systemimage -j$(nproc --all)
-
-      - name: Rename and compress GSI
-        id: compress
-        run: |
-          BUILD_DATE=$(date +%Y%m%d)
-          BUILD_TAG="EvolutionX-U-GSI-arm64-bvN-$BUILD_DATE"
-          
-          cd evo/out/target/product/treble/
-          
-          SYSTEM_IMG_FILE=$(find . -maxdepth 1 -name "system*.img" -print -quit)
-          
-          if [ -f "$SYSTEM_IMG_FILE" ]; then
-            mv "$SYSTEM_IMG_FILE" "$BUILD_TAG.img"
-            xz -c9 "$BUILD_TAG.img" > "$BUILD_TAG.img.xz"
-            echo "::set-output name=artifact_name::$BUILD_TAG.img.xz"
-          else
-            echo "ERROR: System image not found in output directory. Check compilation logs."
-            exit 1
-          fi
-
-      - name: Upload GSI Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.compress.outputs.artifact_name }}
-          path: evo/out/target/product/treble/*.xz
-          retention-days: 7
+    # 5. اعمال پچ‌ها و آماده‌سازی Treble
+    - name: Apply Patches and Setup Treble
+      run: |
+        cd evo
+        # اعمال پچ‌های TrebleDroid و محلی
+        ./patches/apply-all.sh
+        
+        # تولید فایل make برای GSI
+        cd device/phh/treble
+        bash generate.sh ../../mytja/evo/evo.mk
+        
+    # 6. ساخت Treble App
+    - name: Build Treble App
+      run: |
+        cd evo/treble_app
+        ./build.sh release
+        
+    # 7. کامپایل GSI
+    - name: Compilation
+      run: |
+        cd evo
+        source build/envsetup.sh
+        ccache -M 50G -F 0
+        lunch treble_arm64_bgN-userdebug
+        make systemimage -j$(nproc --all)
+        
+    # 8. فشرده سازی و آپلود
+    - name: Compress and Upload Artifact
+      run: |
+        cd evo/out/target/product/tdgsi_arm64_ab
+        xz -9 -T0 -v -z system.img
+        
+        # آپلود خروجی نهایی به عنوان Artifact
+        echo "LATEST_GSI_FILE=$(ls *.xz)" >> $GITHUB_ENV
+        
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Evolution-X-Treble-GSI
+        path: evo/out/target/product/tdgsi_arm64_ab/${{ env.LATEST_GSI_FILE }}
