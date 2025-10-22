@@ -42,9 +42,13 @@ jobs:
           mkdir -p .repo/snippets 
           
           # 3. DOWNLOAD the Treble Manifest (default.xml)
-          # توجه: این مانیفست احتمالاً حاوی تعاریف تکراری AOSP است.
           TREBLE_MANIFEST_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/default.xml"
           curl -Lo .repo/local_manifests/default.xml "$TREBLE_MANIFEST_URL"
+          
+          # **CRITICAL FIX:** Remove the duplicate project definition using sed.
+          # This targets the exact line confirmed by the debug output.
+          echo "Applying fix for duplicate project: platform/build/bazel_common_rules"
+          sed -i '/platform\/build\/bazel_common_rules/d' .repo/local_manifests/default.xml
           
           # 4. DOWNLOAD the EvoX Snippet (evolution.xml)
           EVOX_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/evolution.xml"
@@ -53,12 +57,6 @@ jobs:
           # 5. DOWNLOAD the Lineage Snippet (lineage.xml)
           LINEAGE_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/lineage.xml"
           curl -Lo .repo/snippets/lineage.xml "$LINEAGE_SNIPPET_URL"
-
-          # 6. FINAL FIX: Remove the specific project causing the conflict based on debug output.
-          # این فایل از اجرای sync جلوگیری می کند و مانیفست اصلی را مجبور می کند تا پروژه را نادیده بگیرد.
-          echo '<manifest>' > .repo/local_manifests/fix_duplicate.xml
-          echo '  <remove-project name="platform/build/bazel_common_rules" />' >> .repo/local_manifests/fix_duplicate.xml 
-          echo '</manifest>' >> .repo/local_manifests/fix_duplicate.xml
 
           cd ..
       
