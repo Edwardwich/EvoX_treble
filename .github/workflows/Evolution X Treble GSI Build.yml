@@ -5,13 +5,13 @@ on:
   workflow_dispatch:
     inputs:
       EVO_BRANCH:
-        description: 'Evolution X manifest branch (e.g., udc for Android 16)'
+        description: 'Evolution X manifest branch (e.g., bka for Android 16)'
         required: true
         default: 'bka'
       TREBLE_MANIFEST_BRANCH:
-        description: 'Branch of the treble_manifest repository (e.g., evo-udc)'
+        description: 'Branch of the treble_manifest repository (e.g., bka)'
         required: true
-        default: 'evo-bka'
+        default: 'bka'
 
 jobs:
   build:
