@@ -64,10 +64,7 @@ jobs:
         timeout-minutes: 360 
         run: |
           cd evo
-          # تنظیم REPO_FLAGS فقط برای این دستور
-          export REPO_FLAGS="-W ignore::DeprecationWarning"
-          # استفاده از j1- و f- برای پایداری
-          repo sync -c -j1 --force-sync --no-clone-bundle --no-tags -f
+          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
       - name: Apply patches and configure Treble
         run: |
