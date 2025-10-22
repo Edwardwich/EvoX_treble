@@ -1,0 +1,125 @@
+
+on:
+  workflow_dispatch:
+  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Initialize build environment and install dependencies
+        # 💡 اضافه شدن python3 --version و ادغام apt update/install
+        run: |
+          echo "Checking Python 3 version available on the runner:"
+          python3 --version
+          
+          echo "Updating packages and installing build dependencies..."
+          sudo apt update
+          sudo apt install -y git-lfs repo ccache make openjdk-11-jdk xz-utils curl
+          
+          # اگرچه python3.8 نصب نشده، اما این بخش وابستگی‌های لازم برای repo sync را فراهم می‌کند.
+
+      - name: Configure ccache
+        run: |
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
+          echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
+          ccache -M 50G -F 0
+
+      - name: Create directories, initialize EvoX Treble repo, and download manifests
+        run: |
+          mkdir -p evo
+          cd evo
+          
+          # تنظیم یک متغیر محیطی برای اطمینان از اینکه اخطارهای Python نادیده گرفته شوند
+          export REPO_FLAGS="-W ignore::DeprecationWarning"
+          
+          # 1. Initialize the Evolution-X manifest
+          repo init -u https://github.com/edwardwich/manifest -b udc --git-lfs
+          
+          # 2. Prepare directories
+          mkdir -p .repo/local_manifests
+          mkdir -p .repo/snippets 
+          
+          # 3. DOWNLOAD the Treble Manifest (default.xml)
+          TREBLE_MANIFEST_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/default.xml"
+          curl -Lo .repo/local_manifests/default.xml "$TREBLE_MANIFEST_URL"
+          
+          # 4. DOWNLOAD the EvoX Snippet (evolution.xml)
+          EVOX_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/evolution.xml"
+          curl -Lo .repo/snippets/evolution.xml "$EVOX_SNIPPET_URL"
+
+          # 5. DOWNLOAD the Lineage Snippet (lineage.xml)
+          LINEAGE_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/lineage.xml"
+          curl -Lo .repo/snippets/lineage.xml "$LINEAGE_SNIPPET_URL"
+
+          fi
+
+          cd ..
+      
+      
+
+      - name: Sync repository (Stable sync with Python fix)
+        timeout-minutes: 360 
+        run: |
+          cd evo
+          # تنظیم REPO_FLAGS فقط برای این دستور
+          export REPO_FLAGS="-W ignore::DeprecationWarning"
+          # استفاده از j1- و f- برای پایداری
+          repo sync -c -j1 --force-sync --no-clone-bundle --no-tags -f
+
+      - name: Apply patches and configure Treble
+        run: |
+          cd evo
+          
+          cp ../evo.mk device/phh/treble/
+          cp -r ../patches .
+          
+          cd device/phh/treble
+          bash generate.sh evo
+          
+          cd ../../../ 
+          patches/apply-patches.sh . trebledroid
+          patches/apply-patches.sh . personal
+          patches/apply-patches.sh . ponces
+
+      - name: Compile GSI (System Image)
+        timeout-minutes: 180 
+        run: |
+          cd evo
+          source build/envsetup.sh
+          
+          # Target: A/B, 64-bit, Binder-64
+          lunch treble_arm64_bvN-userdebug
+          
+          make systemimage -j$(nproc --all)
+
+      - name: Rename and compress GSI
+        id: compress
+        run: |
+          BUILD_DATE=$(date +%Y%m%d)
+          BUILD_TAG="EvolutionX-U-GSI-arm64-bvN-$BUILD_DATE"
+          
+          cd evo/out/target/product/treble/
+          
+          SYSTEM_IMG_FILE=$(find . -maxdepth 1 -name "system*.img" -print -quit)
+          
+          if [ -f "$SYSTEM_IMG_FILE" ]; then
+            mv "$SYSTEM_IMG_FILE" "$BUILD_TAG.img"
+            xz -c9 "$BUILD_TAG.img" > "$BUILD_TAG.img.xz"
+            echo "::set-output name=artifact_name::$BUILD_TAG.img.xz"
+          else
+            echo "ERROR: System image not found in output directory. Check compilation logs."
+            exit 1
+          fi
+
+      - name: Upload GSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.compress.outputs.artifact_name }}
+          path: evo/out/target/product/treble/*.xz
+          retention-days: 7
