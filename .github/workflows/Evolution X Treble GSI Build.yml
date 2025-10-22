@@ -60,7 +60,7 @@ jobs:
         
         # 2. Clone Local Manifest (This is a common source of the 'duplicate path' error)
         echo "Cloning local treble manifest..."
-        git clone https://github.com/mytja/treble_manifest.git -b ${{ github.event.inputs.TREBLE_MANIFEST_BRANCH }} .repo/local_manifests
+        git clone https://github.com/Evolution-X/treble_manifest.git -b ${{ github.event.inputs.TREBLE_MANIFEST_BRANCH }} .repo/local_manifests
         
         # 3. HYPOTHETICAL FIX: Remove the line causing 'duplicate path build/blueprint'
         # This command deletes any line containing 'platform/build/blueprint' from local XML files.
