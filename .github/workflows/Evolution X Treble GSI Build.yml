@@ -7,7 +7,7 @@ on:
       EVO_BRANCH:
         description: 'Evolution X manifest branch (e.g., bka for Android 16)'
         required: true
-        default: 'bka' # Your desired branch
+        default: 'bka'
 
 jobs:
   build:
@@ -38,10 +38,10 @@ jobs:
         # Fix: Using 'python-is-python3' instead of obsolete 'python'
         sudo apt install -y python-is-python3 python3-pip make zip xz-utils rsync gnupg build-essential ccache curl git bc bison flex libncurses5-dev libssl-dev texinfo gawk liblz4-tool
         
-        # SETTING SWAP FILE TO 32GB (32 * 1024 = 32768)
-        echo "Setting up 32GB swap file..."
+        # SETTING SWAP FILE TO 8GB (8 * 1024 = 8192)
+        echo "Setting up 8GB swap file..."
         sudo swapoff -a
-        sudo dd if=/dev/zero of=/swapfile bs=1M count=32768 # 32 GB
+        sudo dd if=/dev/zero of=/swapfile bs=1M count=8192 # 8 GB
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
@@ -86,7 +86,7 @@ jobs:
         echo "Starting GSI compilation..."
         cd evo
         source build/envsetup.sh
-        # Set Ccache to 50GB (as previously requested)
+        # Set Ccache to 50GB
         ccache -M 50G -F 0
         lunch treble_arm64_bgN-userdebug
         make systemimage -j$(nproc --all)
