@@ -38,10 +38,10 @@ jobs:
         # Fix: Using 'python-is-python3' instead of obsolete 'python'
         sudo apt install -y python-is-python3 python3-pip make zip xz-utils rsync gnupg build-essential ccache curl git bc bison flex libncurses5-dev libssl-dev texinfo gawk liblz4-tool
         
-        # INCREASED SWAP FILE TO 50GB
-        echo "Setting up 50GB swap file..."
+        # SETTING SWAP FILE TO 32GB (32 * 1024 = 32768)
+        echo "Setting up 32GB swap file..."
         sudo swapoff -a
-        sudo dd if=/dev/zero of=/swapfile bs=1M count=51200 # 50 GB
+        sudo dd if=/dev/zero of=/swapfile bs=1M count=32768 # 32 GB
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
@@ -55,7 +55,7 @@ jobs:
         echo "Initializing Evolution X manifest..."
         repo init --depth=1 -u https://github.com/Evolution-X/manifest -b ${{ github.event.inputs.EVO_BRANCH }}
         
-        # 2. Run Sync: Download the source code (This will now run without authentication or repo path errors)
+        # 2. Run Sync: Download the source code
         echo "Starting repo sync..."
         repo sync -c --force-sync --no-clone-bundle --no-tags -j$(nproc --all)
         
@@ -63,15 +63,14 @@ jobs:
       run: |
         cd evo
         
-        # ⚠️ NOTE: This step assumes the necessary TrebleDroid patches are either in your source
-        # or were manually added via your own local manifest, as Mytja's repository was removed.
+        # This block executes patches if they exist (common in Treble builds)
         if [ -d "./patches" ]; then
           echo "Applying patches..."
           ./patches/apply-all.sh
         fi
         
         # Generate the required makefile for the GSI build
-        # ⚠️ DOUBLE CHECK THIS PATH: If device/mytja/evo/evo.mk does not exist after sync, this will fail.
+        # NOTE: If this fails, the path ../../mytja/evo/evo.mk is incorrect for your setup.
         echo "Generating Treble makefile..."
         cd device/phh/treble
         bash generate.sh ../../mytja/evo/evo.mk
@@ -87,7 +86,7 @@ jobs:
         echo "Starting GSI compilation..."
         cd evo
         source build/envsetup.sh
-        # Set up Ccache 
+        # Set Ccache to 50GB (as previously requested)
         ccache -M 50G -F 0
         lunch treble_arm64_bgN-userdebug
         make systemimage -j$(nproc --all)
