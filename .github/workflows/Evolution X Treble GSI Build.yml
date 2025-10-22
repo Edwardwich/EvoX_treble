@@ -48,10 +48,10 @@ jobs:
         # Fix: Using 'python-is-python3' instead of obsolete 'python'
         sudo apt install -y python-is-python3 python3-pip make zip xz-utils rsync gnupg build-essential ccache curl git bc bison flex libncurses5-dev libssl-dev texinfo gawk liblz4-tool
         
-        # SETTING SWAP FILE TO 8GB (8 * 1024 = 8192)
-        echo "Setting up 8GB swap file..."
+        # SETTING SWAP FILE TO 8GB (16 * 1024 = 16384)
+        echo "Setting up 16GB swap file..."
         sudo swapoff -a
-        sudo dd if=/dev/zero of=/swapfile bs=1M count=8192 # 8 GB
+        sudo dd if=/dev/zero of=/swapfile bs=1M count=16384 # 16 GB
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
@@ -96,8 +96,8 @@ jobs:
         echo "Starting GSI compilation..."
         cd evo
         source build/envsetup.sh
-        # Set Ccache to 50GB
-        ccache -M 50G -F 0
+        # Set Ccache to 60GB
+        ccache -M 60G -F 0
         lunch treble_arm64_bgN-userdebug
         make systemimage -j$(nproc --all)
         
