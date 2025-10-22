@@ -53,21 +53,14 @@ jobs:
           LINEAGE_SNIPPET_URL="https://raw.githubusercontent.com/Edwardwich/manifest/bka/snippets/lineage.xml"
           curl -Lo .repo/snippets/lineage.xml "$LINEAGE_SNIPPET_URL"
 
-          # 6. FIX: Add a local manifest to remove the duplicate path
-          # اگر نام 'platform/build/bazel_common_rules' کار نکرد، باید نام صحیح را از طریق گام Debugging پیدا کنید.
+          # 6. FINAL FIX: Remove the project that is duplicated by both manifests
           echo '<manifest>' > .repo/local_manifests/fix_duplicate.xml
           echo '  <remove-project name="platform/build/bazel_common_rules" />' >> .repo/local_manifests/fix_duplicate.xml 
           echo '</manifest>' >> .repo/local_manifests/fix_duplicate.xml
 
           cd ..
       
-      - name: Debug Manifest Content (CRITICAL STEP FOR FINDING DUPLICATE NAME)
-        run: |
-          echo "--- DEBUGGING: Searching for duplicate path 'build/bazel_common_rules' ---"
-          find evo/.repo/ -name "*.xml" -exec grep -H 'path="build/bazel_common_rules"' {} \;
-          echo "--- The output above shows the exact project names (name='...') causing the conflict. ---"
-          
-          # اگر خطا ادامه داشت، نام پروژه صحیح را از خروجی بالا پیدا کنید و آن را در فایل fix_duplicate.xml جایگزین نمایید.
+      # The Debug step has been removed now that the project name is confirmed.
 
       - name: Sync repository (Stable sync with Python fix)
         timeout-minutes: 360 
