@@ -11,16 +11,26 @@ on:
 
 jobs:
   build:
+    timeout-minutes: 480
     runs-on: ubuntu-latest
-    
-    # Set a maximum time limit for the job
-    timeout-minutes: 360
-
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: Check disk space
+      run: |
+        df -h
+
+    - name: Clean up disk space
+      run: |
+        sudo apt-get clean
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        docker rmi $(docker images -q) || true
 
     - name: Install Repo Tool
       run: |
