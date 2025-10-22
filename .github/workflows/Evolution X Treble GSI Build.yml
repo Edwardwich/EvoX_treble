@@ -1,23 +1,23 @@
-
+name: Evolution X Treble GSI Build
 
 on:
-  # این امکان را می‌دهد که به صورت دستی از تب Actions اجرا شود
+  # Allows manual triggering from the GitHub Actions tab
   workflow_dispatch:
     inputs:
       EVO_BRANCH:
-        description: 'Evolution X manifest branch (e.g., udc for Android 14)'
+        description: 'Evolution X manifest branch (e.g., udc for Android 16)'
         required: true
-        default: 'udc'
+        default: 'bka'
       TREBLE_MANIFEST_BRANCH:
         description: 'Branch of the treble_manifest repository (e.g., evo-udc)'
         required: true
-        default: 'evo-udc'
+        default: 'evo-bka'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
-    # تنظیم زمان تایم‌اوت در صورت طولانی شدن بیلد
+    # Set a maximum time limit for the job
     timeout-minutes: 360
 
     steps:
@@ -28,12 +28,12 @@ jobs:
 
     - name: Setup Build Environment & Install Dependencies
       run: |
-        # به‌روزرسانی و نصب وابستگی‌های مورد نیاز
+        echo "Updating system and installing dependencies..."
         sudo apt update
-        # رفع خطای "Package 'python' has no installation candidate"
+        # Fix: Replace 'python' with the correct package 'python-is-python3'
         sudo apt install -y python-is-python3 python3-pip make zip xz-utils rsync gnupg build-essential ccache curl git bc bison flex libncurses5-dev libssl-dev texinfo gawk liblz4-tool
         
-        # افزایش فضای دیسک (ایجاد Swap File 16GB)
+        # Increase disk space (Create 16GB Swap File, essential for AOSP/GSI builds)
         echo "Setting up 16GB swap file..."
         sudo swapoff -a
         sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
@@ -41,71 +41,74 @@ jobs:
         sudo mkswap /swapfile
         sudo swapon /swapfile
         
-    - name: Install Repo
+    - name: Initialize, Sync Manifest, and Apply Fixes
       run: |
+        # Fix: Install Repo and set PATH within the same run step
+        echo "Installing and configuring repo tool..."
         mkdir -p ~/bin
-        PATH=~/bin:$PATH
+        export PATH=~/bin:$PATH
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
-
-    - name: Initialize and Sync Manifest
-      run: |
+        
+        # Create build directory and initialize
         mkdir -p evo
         cd evo
         
-        # 1. Repo Init: شروع فرآیند بیلد با مانیفست اصلی Evolution X
+        # 1. Repo Init: Initialize the Evolution X main manifest
+        echo "Initializing Evolution X manifest..."
         repo init --depth=1 -u https://github.com/Evolution-X/manifest -b ${{ github.event.inputs.EVO_BRANCH }}
         
-        # 2. کلون کردن مانیفست محلی
-        # این مانیفست فایل‌های XML را به .repo/local_manifests/ اضافه می‌کند.
-        # فرض بر این است که از مخزن mytja/treble_manifest استفاده می‌شود.
+        # 2. Clone Local Manifest (This is a common source of the 'duplicate path' error)
+        echo "Cloning local treble manifest..."
         git clone https://github.com/mytja/treble_manifest.git -b ${{ github.event.inputs.TREBLE_MANIFEST_BRANCH }} .repo/local_manifests
         
-        # 3. رفع خطای فرضی "duplicate path build/blueprint"
-        # ⚠️ اگر مانیفست محلی شما (احتمالاً evo.xml یا treble.xml)
-        # حاوی <project path="build/blueprint" ...> باشد، این خط آن را حذف می‌کند.
-        echo "Attempting to fix duplicate path error by modifying local manifest..."
+        # 3. HYPOTHETICAL FIX: Remove the line causing 'duplicate path build/blueprint'
+        # This command deletes any line containing 'platform/build/blueprint' from local XML files.
+        echo "Applying hypothetical fix for 'duplicate path build/blueprint'..."
         sed -i '/platform\/build\/blueprint/d' .repo/local_manifests/*.xml
         
-        # 4. اجرای Sync: دانلود کد منبع
+        # 4. Run Sync: Download the source code
         echo "Starting repo sync..."
         repo sync -c --force-sync --no-clone-bundle --no-tags -j$(nproc --all)
         
     - name: Apply Patches and Setup Treble
       run: |
         cd evo
-        # اعمال پچ‌های TrebleDroid و محلی (اگر ./patches وجود داشته باشد)
+        # Apply TrebleDroid and local patches (if the patches directory exists)
         if [ -d "./patches" ]; then
+          echo "Applying patches..."
           ./patches/apply-all.sh
         fi
         
-        # تولید فایل make برای GSI
+        # Generate the required makefile for the GSI build
+        echo "Generating Treble makefile..."
         cd device/phh/treble
         bash generate.sh ../../mytja/evo/evo.mk
         
     - name: Build Treble App
       run: |
-        # ساخت Treble App
+        echo "Building Treble App..."
         cd evo/treble_app
         ./build.sh release
         
     - name: Compilation
       run: |
-        # شروع بیلد نهایی GSI
+        echo "Starting GSI compilation..."
         cd evo
         source build/envsetup.sh
+        # Set up Ccache for faster subsequent builds (if using a persistent runner, though less effective on GitHub Actions)
         ccache -M 50G -F 0
-        # تنظیمات lunch: treble_arm64_bgN-userdebug (A/B, GApps, V-A, Non-root)
+        # Lunch command for A/B, GApps, V-A, Non-root build type
         lunch treble_arm64_bgN-userdebug
         make systemimage -j$(nproc --all)
         
     - name: Compress GSI Image
       run: |
-        # فشرده‌سازی ایمیج سیستم
+        echo "Compressing system image with xz..."
         cd evo/out/target/product/tdgsi_arm64_ab
         xz -9 -T0 -v -z system.img
         
-        # ذخیره نام فایل فشرده برای مرحله بعد
+        # Save the final compressed file name to an environment variable
         echo "LATEST_GSI_FILE=$(ls *.xz)" >> $GITHUB_ENV
         
     - name: Upload GSI Artifact
